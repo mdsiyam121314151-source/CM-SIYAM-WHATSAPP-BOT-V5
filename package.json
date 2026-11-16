@@ -1,0 +1,21 @@
+{
+  "name": "cm-siyam-whatsapp-bot-v5",
+  "version": "5.0.0",
+  "description": "CM SIYAM WhatsApp Bot V5",
+  "main": "index.js",
+  "type": "module",
+  "author": "𝐂𝐌 𝐒𝐈𝐘𝐀𝐌",
+  "license": "UNLICENSED",
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "scripts": {
+    "start": "node index.js",
+    "dev": "node --watch index.js"
+  },
+  "dependencies": {
+    "@whiskeysockets/baileys": "^6.7.18",
+    "dotenv": "^16.4.7",
+    "pino": "^9.6.0"
+  }
+}
