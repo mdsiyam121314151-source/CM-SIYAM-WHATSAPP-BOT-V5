@@ -1,66 +1,59 @@
+
+// AUTHOR: 𝐑𝐉 𝐬𝐢𝐲𝐚𝐦
+
 import { readData, writeData } from "./index.js";
-import { AUTHOR } from "../config.js";
 
-const FILE = "users";
+const DB_NAME = "users";
 
-function normalize(id) {
-  return String(id || "").trim();
+export async function getUsers() {
+  return readData(DB_NAME, {});
 }
 
 export async function getUser(id) {
-  const users = await readData(FILE, {});
-  return users[normalize(id)] || null;
+  const users = await getUsers();
+
+  return users[id] || null;
 }
 
 export async function createUser(id, data = {}) {
-  const users = await readData(FILE, {});
-  const userId = normalize(id);
+  const users = await getUsers();
 
-  if (!userId) return false;
-
-  if (!users[userId]) {
-    users[userId] = {
-      id: userId,
+  if (!users[id]) {
+    users[id] = {
+      id,
       name: data.name || "Unknown",
-      role: "USER",
+      role: data.role || "USER",
       banned: false,
       createdAt: Date.now(),
-      updatedAt: Date.now(),
-      author: AUTHOR
+      ...data
     };
   }
 
-  return writeData(FILE, users);
+  await writeData(DB_NAME, users);
+
+  return users[id];
 }
 
-export async function updateUser(id, updates = {}) {
-  const users = await readData(FILE, {});
-  const userId = normalize(id);
+export async function updateUser(id, data = {}) {
+  const users = await getUsers();
 
-  if (!users[userId]) return false;
-
-  users[userId] = {
-    ...users[userId],
-    ...updates,
-    id: userId,
-    updatedAt: Date.now(),
-    author: AUTHOR
+  users[id] = {
+    ...(users[id] || { id, createdAt: Date.now() }),
+    ...data,
+    updatedAt: Date.now()
   };
 
-  return writeData(FILE, users);
+  await writeData(DB_NAME, users);
+
+  return users[id];
 }
 
 export async function deleteUser(id) {
-  const users = await readData(FILE, {});
-  const userId = normalize(id);
+  const users = await getUsers();
 
-  if (!users[userId]) return false;
+  delete users[id];
 
-  delete users[userId];
+  await writeData(DB_NAME, users);
 
-  return writeData(FILE, users);
-}
-
-export async function getAllUsers() {
-  return readData(FILE, {});
+  return true;
 }
