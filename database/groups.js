@@ -1,69 +1,68 @@
+
+// AUTHOR: 𝐑𝐉 𝐬𝐢𝐲𝐚𝐦
+
 import { readData, writeData } from "./index.js";
-import { AUTHOR } from "../config.js";
 
-const FILE = "groups";
+const DB_NAME = "groups";
 
-function normalize(id) {
-  return String(id || "").trim();
+export async function getGroups() {
+  return readData(DB_NAME, {});
 }
 
 export async function getGroup(id) {
-  const groups = await readData(FILE, {});
-  return groups[normalize(id)] || null;
+  const groups = await getGroups();
+
+  return groups[id] || {
+    id,
+    mode: null,
+    welcome: true,
+    goodbye: true,
+    createdAt: null
+  };
 }
 
 export async function createGroup(id, data = {}) {
-  const groups = await readData(FILE, {});
-  const groupId = normalize(id);
+  const groups = await getGroups();
 
-  if (!groupId) return false;
-
-  if (!groups[groupId]) {
-    groups[groupId] = {
-      id: groupId,
-      name: data.name || "Unknown Group",
-      prefix: data.prefix || null,
-      mode: data.mode || "all",
-      welcome: data.welcome ?? true,
-      goodbye: data.goodbye ?? true,
-      banned: false,
+  if (!groups[id]) {
+    groups[id] = {
+      id,
+      mode: null,
+      welcome: true,
+      goodbye: true,
       createdAt: Date.now(),
-      updatedAt: Date.now(),
-      author: AUTHOR
+      ...data
     };
   }
 
-  return writeData(FILE, groups);
+  await writeData(DB_NAME, groups);
+
+  return groups[id];
 }
 
-export async function updateGroup(id, updates = {}) {
-  const groups = await readData(FILE, {});
-  const groupId = normalize(id);
+export async function updateGroup(id, data = {}) {
+  const groups = await getGroups();
 
-  if (!groups[groupId]) return false;
-
-  groups[groupId] = {
-    ...groups[groupId],
-    ...updates,
-    id: groupId,
-    updatedAt: Date.now(),
-    author: AUTHOR
+  groups[id] = {
+    ...(groups[id] || {
+      id,
+      createdAt: Date.now()
+    }),
+    ...data,
+    updatedAt: Date.now()
   };
 
-  return writeData(FILE, groups);
+  await writeData(DB_NAME, groups);
+
+  return groups[id];
 }
 
 export async function deleteGroup(id) {
-  const groups = await readData(FILE, {});
-  const groupId = normalize(id);
+  const groups = await getGroups();
 
-  if (!groups[groupId]) return false;
+  delete groups[id];
 
-  delete groups[groupId];
+  await writeData(DB_NAME, groups);
 
-  return writeData(FILE, groups);
+  return true;
 }
-
-export async function getAllGroups() {
-  return readData(FILE, {});
-      }
