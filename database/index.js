@@ -1,62 +1,62 @@
+
+// AUTHOR: 𝐑𝐉 𝐬𝐢𝐲𝐚𝐦
+
 import fs from "fs-extra";
 import path from "path";
 
-import { AUTHOR } from "../config.js";
+import { CONFIG } from "../config.js";
 
-const DATA_DIR = path.resolve("./database/data");
+await fs.ensureDir(CONFIG.DATABASE_DIR);
 
-await fs.ensureDir(DATA_DIR);
-
-export async function readData(file, fallback = {}) {
-  const filePath = path.join(DATA_DIR, `${file}.json`);
+export async function readData(name, fallback = {}) {
+  const file = path.join(CONFIG.DATABASE_DIR, `${name}.json`);
 
   try {
-    if (!(await fs.pathExists(filePath))) {
-      await writeData(file, fallback);
+    if (!(await fs.pathExists(file))) {
       return fallback;
     }
 
-    return await fs.readJson(filePath);
+    return await fs.readJson(file);
 
   } catch (error) {
-    console.error(`[RJ-SIYAM] Database read error: ${file}`, error);
+    console.error(`Database read error: ${name}`, error);
     return fallback;
   }
 }
 
-export async function writeData(file, data) {
-  const filePath = path.join(DATA_DIR, `${file}.json`);
+export async function writeData(name, data) {
+  const file = path.join(CONFIG.DATABASE_DIR, `${name}.json`);
+  const tempFile = `${file}.tmp`;
 
-  try {
-    await fs.ensureDir(DATA_DIR);
+  await fs.ensureDir(CONFIG.DATABASE_DIR);
 
-    await fs.writeJson(filePath, data, {
-      spaces: 2
-    });
+  await fs.writeFile(
+    tempFile,
+    JSON.stringify(data, null, 2),
+    "utf8"
+  );
 
-    return true;
+  await fs.move(tempFile, file, { overwrite: true });
 
-  } catch (error) {
-    console.error(`[RJ-SIYAM] Database write error: ${file}`, error);
-    return false;
-  }
+  return true;
 }
 
-export async function deleteData(file) {
-  const filePath = path.join(DATA_DIR, `${file}.json`);
+export async function deleteData(name) {
+  const file = path.join(CONFIG.DATABASE_DIR, `${name}.json`);
 
-  try {
-    await fs.remove(filePath);
-    return true;
-  } catch (error) {
-    console.error(`[RJ-SIYAM] Database delete error: ${file}`, error);
-    return false;
+  if (await fs.pathExists(file)) {
+    await fs.remove(file);
   }
+
+  return true;
 }
 
-export function getDatabaseInfo() {
+export async function getDatabaseInfo() {
+  const files = await fs.readdir(CONFIG.DATABASE_DIR);
+
   return {
-    author: AUTHOR,
-    directory: DATA_DIR
+    directory: CONFIG.DATABASE_DIR,
+    files,
+    count: files.length
   };
 }
