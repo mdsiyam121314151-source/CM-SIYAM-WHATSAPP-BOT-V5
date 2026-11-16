@@ -1,21 +1,21 @@
 {
-  "name": "cm-siyam-whatsapp-bot-v5",
+  "name": "rj-siyam-whatsapp-botv5",
   "version": "5.0.0",
-  "description": "CM SIYAM WhatsApp Bot V5",
+  "description": "RJ-siyam whatsapp-botV5",
   "main": "index.js",
   "type": "module",
-  "author": "𝐂𝐌 𝐒𝐈𝐘𝐀𝐌",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "author": "𝐑𝐉 𝐬𝐢𝐲𝐚𝐦",
   "license": "UNLICENSED",
   "engines": {
     "node": ">=20.0.0"
   },
-  "scripts": {
-    "start": "node index.js",
-    "dev": "node --watch index.js"
-  },
   "dependencies": {
     "@whiskeysockets/baileys": "^6.7.18",
     "dotenv": "^16.4.7",
-    "pino": "^9.6.0"
+    "pino": "^9.6.0",
+    "fs-extra": "^11.2.0"
   }
 }
