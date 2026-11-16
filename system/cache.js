@@ -1,30 +1,24 @@
-import { AUTHOR } from "../config.js";
+
+// AUTHOR: 𝐑𝐉 𝐬𝐢𝐲𝐚𝐦
 
 const cache = new Map();
 
-export function setCache(key, value, ttl = 0) {
-  const id = String(key);
-
-  const expiresAt = ttl > 0
-    ? Date.now() + ttl
-    : null;
-
-  cache.set(id, {
+export function setCache(key, value, ttl = 60000) {
+  cache.set(key, {
     value,
-    expiresAt,
-    author: AUTHOR
+    expiresAt: Date.now() + ttl
   });
 
-  return true;
+  return value;
 }
 
 export function getCache(key) {
-  const item = cache.get(String(key));
+  const item = cache.get(key);
 
   if (!item) return null;
 
-  if (item.expiresAt && Date.now() >= item.expiresAt) {
-    cache.delete(String(key));
+  if (Date.now() > item.expiresAt) {
+    cache.delete(key);
     return null;
   }
 
@@ -32,20 +26,26 @@ export function getCache(key) {
 }
 
 export function hasCache(key) {
-  return getCache(key) !== null;
+  const item = cache.get(key);
+
+  if (!item) return false;
+
+  if (Date.now() > item.expiresAt) {
+    cache.delete(key);
+    return false;
+  }
+
+  return true;
 }
 
 export function deleteCache(key) {
-  return cache.delete(String(key));
+  return cache.delete(key);
 }
 
 export function clearCache() {
   cache.clear();
 }
 
-export function getCacheStats() {
-  return {
-    size: cache.size,
-    author: AUTHOR
-  };
+export function cacheSize() {
+  return cache.size;
 }
