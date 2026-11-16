@@ -1,93 +1,152 @@
-import { CONFIG, AUTHOR } from "./config.js";
+
+// AUTHOR: 𝐑𝐉 𝐬𝐢𝐲𝐚𝐦
+
+import fs from "fs-extra";
+
+import { CONFIG } from "./config.js";
+
+import { createLogger } from "./system/logger.js";
+import { validateAuthor } from "./scripts/authorGuard.js";
+import { printWatchdog } from "./system/watchdog.js";
+
 import { connectToWhatsApp } from "./core/connection.js";
-import { handleMessages } from "./core/messageHandler.js";
 import { loadCommands } from "./core/commandHandler.js";
+import { handleMessages } from "./core/messageHandler.js";
+import { loadEvents, attachEvents } from "./core/eventHandler.js";
+import { installErrorHandlers } from "./core/errorHandler.js";
 
-let reconnectTimer = null;
-let reconnectDelay = CONFIG.RECONNECT_DELAY;
-let isStarting = false;
+import { DisconnectReason } from "@whiskeysockets/baileys";
+
+const logger = createLogger();
+
 let currentSocket = null;
+let reconnectTimer = null;
+let reconnectAttempts = 0;
+let isStopping = false;
+let isStarting = false;
 
-const log = {
-  info: (...args) => console.log("🟢 [RJ-SIYAM]", ...args),
-  warn: (...args) => console.warn("🟡 [RJ-SIYAM]", ...args),
-  error: (...args) => console.error("🔴 [RJ-SIYAM]", ...args)
-};
+async function prepareDirectories() {
+  await Promise.all([
+    fs.ensureDir(CONFIG.SESSION_DIR),
+    fs.ensureDir(CONFIG.COMMAND_DIR),
+    fs.ensureDir(CONFIG.EVENT_DIR),
+    fs.ensureDir(CONFIG.DATABASE_DIR)
+  ]);
+}
 
 async function startBot() {
-  if (isStarting) return;
+  if (isStopping || isStarting) return;
 
   isStarting = true;
 
   try {
-    log.info(CONFIG.BOT_NAME);
-    log.info(`Author: ${AUTHOR}`);
+    await prepareDirectories();
 
-    await loadCommands();
+    logger.info("Starting " + CONFIG.BOT_NAME);
+
+    if (CONFIG.AUTHOR_CHECK) {
+      await validateAuthor();
+    }
+
+    const commands = await loadCommands();
+    const events = await loadEvents();
+
+    logger.success(`Loaded ${commands.size} commands`);
+    logger.success(`Loaded ${events.size} events`);
 
     const sock = await connectToWhatsApp();
+
     currentSocket = sock;
 
     handleMessages(sock);
 
-    sock.ev.on("connection.update", ({ connection, lastDisconnect }) => {
+    attachEvents(sock);
+
+    sock.ev.on("connection.update", async update => {
+      const { connection, lastDisconnect } = update;
+
       if (connection === "open") {
-        reconnectDelay = CONFIG.RECONNECT_DELAY;
-        log.info("WhatsApp connected successfully");
+        reconnectAttempts = 0;
+
+        logger.success("WhatsApp connected successfully");
+        logger.success(CONFIG.BOT_NAME);
+
+        printWatchdog();
       }
 
       if (connection === "close") {
+        currentSocket = null;
+
         const statusCode =
           lastDisconnect?.error?.output?.statusCode;
 
-        log.warn("Connection closed:", statusCode ?? "unknown");
+        logger.warn(
+          `Connection closed. Status: ${statusCode ?? "unknown"}`
+        );
 
-        if (!reconnectTimer) {
-          reconnectTimer = setTimeout(() => {
-            reconnectTimer = null;
-            startBot();
-          }, reconnectDelay);
-
-          reconnectDelay = Math.min(
-            reconnectDelay * 2,
-            CONFIG.MAX_RECONNECT_DELAY
+        if (statusCode === DisconnectReason.loggedOut) {
+          logger.error(
+            "WhatsApp session logged out. Relink the account."
           );
+          isStopping = true;
+          return;
         }
+
+        scheduleReconnect();
       }
     });
 
   } catch (error) {
-    log.error("Bot startup failed:", error);
-
-    if (!reconnectTimer) {
-      reconnectTimer = setTimeout(() => {
-        reconnectTimer = null;
-        startBot();
-      }, reconnectDelay);
-    }
+    logger.error("Bot startup failed", error);
+    scheduleReconnect();
   } finally {
     isStarting = false;
   }
 }
 
-process.on("uncaughtException", error => {
-  log.error("Uncaught Exception:", error);
-});
+function scheduleReconnect() {
+  if (isStopping || reconnectTimer) return;
 
-process.on("unhandledRejection", error => {
-  log.error("Unhandled Rejection:", error);
-});
+  reconnectAttempts++;
 
-process.on("SIGINT", () => {
-  log.warn("Bot shutting down");
+  const delay = Math.min(
+    CONFIG.RECONNECT_DELAY * Math.pow(2, reconnectAttempts - 1),
+    CONFIG.MAX_RECONNECT_DELAY
+  );
+
+  logger.warn(`Reconnecting in ${Math.round(delay / 1000)} seconds`);
+
+  reconnectTimer = setTimeout(async () => {
+    reconnectTimer = null;
+    await startBot();
+  }, delay);
+}
+
+installErrorHandlers(logger);
+
+process.on("SIGINT", shutdown);
+process.on("SIGTERM", shutdown);
+
+async function shutdown() {
+  if (isStopping) return;
+
+  isStopping = true;
+
+  logger.warn("Stopping bot...");
 
   if (reconnectTimer) {
     clearTimeout(reconnectTimer);
+    reconnectTimer = null;
   }
 
-  currentSocket?.end?.(new Error("Bot stopped"));
+  try {
+    currentSocket?.end?.(new Error("Bot shutdown"));
+  } catch (error) {
+    logger.error("Shutdown error", error);
+  }
 
+  logger.success("Bot stopped");
   process.exit(0);
-});
+}
 
 startBot();
