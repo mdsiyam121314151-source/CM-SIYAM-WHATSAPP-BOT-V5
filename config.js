@@ -1,48 +1,59 @@
-/**
- * CM SIYAM WhatsApp Bot V5
- * Author: 𝐂𝐌 𝐒𝐈𝐘𝐀𝐌
- */
 
 import "dotenv/config";
 
-export const CONFIG = Object.freeze({
-  BOT_NAME: "CM SIYAM WhatsApp Bot",
-  VERSION: "5.0.0",
-  AUTHOR: "𝐂𝐌 𝐒𝐈𝐘𝐀𝐌",
+// লেখকের নাম
+export const AUTHOR = "𝐑𝐉 𝐬𝐢𝐲𝐚𝐦";
 
+const list = (value = "") =>
+  value.split(",").map(v => v.trim()).filter(Boolean);
+
+export const CONFIG = Object.freeze({
+  // বটের নাম
+  BOT_NAME: "RJ-siyam whatsapp-botV5",
+
+  // বটের ভার্সন
+  VERSION: "5.0",
+
+  // লেখকের নাম
+  AUTHOR,
+
+  // বটের কমান্ড Prefix
   PREFIX: process.env.BOT_PREFIX || ".",
 
-  PHONE_NUMBER: process.env.BOT_PHONE_NUMBER || "",
+  // এখানে তোমার বটের WhatsApp নাম্বার বসাবে
+  PHONE_NUMBER: (process.env.BOT_PHONE_NUMBER || "").replace(/\D/g, ""),
 
-  OWNER: [
-    process.env.OWNER_NUMBER || ""
-  ],
+  // এখানে বটের মালিক অর্থাৎ তোমার নিজের WhatsApp নাম্বার বসাবে
+  OWNER: (process.env.OWNER_NUMBER || "").replace(/\D/g, ""),
 
-  BOT_ADMINS: [],
+  // এখানে বটের অন্যান্য অ্যাডমিনদের WhatsApp নাম্বার বসাবে
+  BOT_ADMINS: list(process.env.BOT_ADMINS),
 
-  WHITELIST: [],
+  // এখানে যাদের বট ব্যবহারের বিশেষ অনুমতি দিতে চাও তাদের নাম্বার বসাবে
+  WHITELIST: list(process.env.WHITELIST),
+
 
   SESSION_DIR: "./session",
 
+
   COMMAND_DIR: "./scripts/cmds",
+
+
   EVENT_DIR: "./scripts/events",
 
   LOG_LEVEL: process.env.LOG_LEVEL || "info",
 
-  PAIRING_CODE: true,
-
-  AUTO_RECONNECT: true,
-
-  MAX_RECONNECT_DELAY: 30000,
-
-  COMMAND_COOLDOWN: 1000,
-
-  MESSAGE_MODE: "all",
+  MESSAGE_MODE: process.env.MESSAGE_MODE || "all",
 
   ALLOW_GROUP: true,
+
   ALLOW_INBOX: true,
 
-  AUTHOR_VALIDATION: true
-});
+  AUTHOR_CHECK: true,
 
-export default CONFIG;
+  COOLDOWN: 1000,
+
+  RECONNECT_DELAY: 5000,
+
+  MAX_RECONNECT_DELAY: 60000
+});
