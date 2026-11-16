@@ -1,128 +1,131 @@
+
+// AUTHOR: 𝐑𝐉 𝐬𝐢𝐲𝐚𝐦
+
 import fs from "fs-extra";
 import path from "path";
 import { pathToFileURL } from "url";
 
 import { CONFIG, AUTHOR } from "../config.js";
 import { checkPermission } from "./permission.js";
+import { COMMAND_CONFIG } from "../configCommands.js";
+import { handleError } from "./errorHandler.js";
+import { createLogger } from "../system/logger.js";
+
+const logger = createLogger();
 
 const commands = new Map();
-const aliases = new Map();
+
+function hasAuthorMarker(source) {
+  return source.includes(`AUTHOR: ${AUTHOR}`);
+}
 
 export async function loadCommands() {
-  await fs.ensureDir(CONFIG.COMMAND_DIR);
-
   commands.clear();
-  aliases.clear();
+
+  await fs.ensureDir(CONFIG.COMMAND_DIR);
 
   const files = await fs.readdir(CONFIG.COMMAND_DIR);
 
   for (const file of files) {
-    if (!file.endsWith(".js")) continue;
+    if (!file.endsWith(COMMAND_CONFIG.commandExtension)) continue;
 
-    const filePath = path.resolve(CONFIG.COMMAND_DIR, file);
+    const fullPath = path.join(CONFIG.COMMAND_DIR, file);
 
     try {
+      const source = await fs.readFile(fullPath, "utf8");
+
+      if (CONFIG.AUTHOR_CHECK && !hasAuthorMarker(source)) {
+        logger.warn(`Command disabled: author marker mismatch: ${file}`);
+        continue;
+      }
+
       const module = await import(
-        `${pathToFileURL(filePath).href}?update=${Date.now()}`
+        pathToFileURL(fullPath).href + `?v=${Date.now()}`
       );
 
       const command = module.default;
 
-      if (
-        !command?.config ||
-        typeof command.onStart !== "function"
-      ) {
-        console.warn(`[RJ-SIYAM] Disabled invalid command: ${file}`);
+      if (!command?.config || typeof command.onStart !== "function") {
+        logger.warn(`Invalid command disabled: ${file}`);
         continue;
       }
 
-      if (
-        CONFIG.AUTHOR_CHECK &&
-        command.config.author !== AUTHOR
-      ) {
-        console.error(`[RJ-SIYAM] Author mismatch: ${file}`);
+      if (command.config.author !== AUTHOR) {
+        logger.warn(`Command disabled: wrong author: ${file}`);
         continue;
       }
 
-      const name = String(
-        command.config.name || ""
-      ).toLowerCase();
+      const name = String(command.config.name || "").toLowerCase();
 
       if (!name) {
-        console.warn(`[RJ-SIYAM] Command name missing: ${file}`);
-        continue;
-      }
-
-      if (commands.has(name)) {
-        console.warn(`[RJ-SIYAM] Duplicate command: ${name}`);
+        logger.warn(`Command disabled: missing name: ${file}`);
         continue;
       }
 
       commands.set(name, command);
 
       for (const alias of command.config.aliases || []) {
-        aliases.set(String(alias).toLowerCase(), name);
+        commands.set(String(alias).toLowerCase(), command);
       }
 
-      console.log(`[RJ-SIYAM] Loaded command: ${name}`);
+      logger.success(`Loaded command: ${name}`);
 
     } catch (error) {
-      console.error(`[RJ-SIYAM] Failed to load ${file}:`, error);
+      logger.error(`Failed to load command: ${file}`, error);
     }
   }
 
-  console.log(`[RJ-SIYAM] Total commands: ${commands.size}`);
+  return commands;
 }
 
-export async function handleCommand(sock, message, body) {
+export async function handleCommand(context) {
+  const { body, reply } = context;
+
   if (!body.startsWith(CONFIG.PREFIX)) return;
 
-  const parts = body
-    .slice(CONFIG.PREFIX.length)
-    .trim()
-    .split(/\s+/);
-
-  const input = (parts.shift() || "").toLowerCase();
+  const input = body.slice(CONFIG.PREFIX.length).trim();
 
   if (!input) return;
 
-  const commandName = aliases.get(input) || input;
-  const command = commands.get(commandName);
+  const parts = input.split(/\s+/);
+  const name = parts.shift().toLowerCase();
+  const args = parts;
+
+  const command = commands.get(name);
 
   if (!command) return;
 
   const permission = await checkPermission(
-    sock,
-    message,
-    command
+    context,
+    command.config
   );
 
-  const jid = message.key.remoteJid;
-
-  const reply = text =>
-    sock.sendMessage(
-      jid,
-      { text: String(text) },
-      { quoted: message }
-    );
-
   if (!permission.allowed) {
-    return reply(`❌ ${permission.reason}`);
+    if (command.config.noPermissionMessage !== false) {
+      await reply(
+        command.config.permissionMessage ||
+        "❌ এই কমান্ড ব্যবহারের অনুমতি তোমার নেই।"
+      );
+    }
+
+    return;
   }
 
   try {
     await command.onStart({
-      sock,
-      message,
-      args: parts,
-      command,
+      ...context,
+      args,
+      commandName: name,
       permission,
-      config: CONFIG,
-      reply
+      config: command.config
     });
-  } catch (error) {
-    console.error(`[RJ-SIYAM] Command error: ${commandName}`, error);
 
-    await reply("❌ Command চালাতে সমস্যা হয়েছে।");
+  } catch (error) {
+    handleError(error, `Command: ${name}`);
+    await reply("❌ কমান্ড চালাতে সমস্যা হয়েছে।");
   }
+}
+
+export function getCommands() {
+  return commands;
 }
