@@ -1,87 +1,110 @@
 
 // AUTHOR: 𝐑𝐉 𝐬𝐢𝐲𝐚𝐦
-// WARNING: AUTHOR পরিবর্তন করলে এই ফাইল Disable হবে।
 
-import { AUTHOR, CONFIG, isOwner, isBotAdmin } from "../config.js";
+import { CONFIG } from "../config.js";
+import { COMMAND_CONFIG } from "../configCommands.js";
 import { getGroup } from "../database/groups.js";
 
-export const ROLES = Object.freeze({
-  USER: "USER",
-  GROUP_ADMIN: "GROUP_ADMIN",
-  BOT_ADMIN: "BOT_ADMIN",
-  OWNER: "OWNER"
-});
+function digits(value = "") {
+  return String(value).replace(/\D/g, "");
+}
 
-export const getUserRole = async ({
-  senderJid,
-  isGroup = false,
-  groupMetadata = null
-}) => {
-  if (!senderJid) return ROLES.USER;
+function isSameUser(a, b) {
+  const first = digits(a);
+  const second = digits(b);
 
-  if (isOwner(senderJid)) return ROLES.OWNER;
+  return first && second && first === second;
+}
 
-  if (isBotAdmin(senderJid)) return ROLES.BOT_ADMIN;
+export async function checkPermission(context, commandConfig = {}) {
+  const { sock, jid, senderJid, isGroup } = context;
 
-  if (isGroup && groupMetadata) {
-    const participant = groupMetadata.participants?.find(p => {
-      const id = p.id || p.jid;
-      return id === senderJid;
-    });
+  const owner = isSameUser(senderJid, CONFIG.OWNER);
 
-    if (
-      participant?.admin === "admin" ||
-      participant?.admin === "superadmin"
-    ) {
-      return ROLES.GROUP_ADMIN;
+  const botAdmin = CONFIG.BOT_ADMINS.some(number =>
+    isSameUser(senderJid, number)
+  );
+
+  const whitelisted = CONFIG.WHITELIST.some(number =>
+    isSameUser(senderJid, number)
+  );
+
+  let groupAdmin = false;
+
+  if (isGroup) {
+    try {
+      const metadata = await sock.groupMetadata(jid);
+
+      groupAdmin = metadata.participants.some(participant => {
+        const same = participant.id === senderJid;
+
+        return same &&
+          ["admin", "superadmin"].includes(participant.admin);
+      });
+
+    } catch {
+      groupAdmin = false;
     }
   }
 
-  return ROLES.USER;
-};
+  let role = "USER";
 
-export const hasPermission = async ({
-  senderJid,
-  requiredRole = "USER",
-  isGroup = false,
-  groupMetadata = null
-}) => {
-  const role = await getUserRole({
-    senderJid,
-    isGroup,
-    groupMetadata
-  });
+  if (owner) role = "OWNER";
+  else if (botAdmin) role = "BOT_ADMIN";
+  else if (groupAdmin) role = "GROUP_ADMIN";
 
-  const levels = {
-    USER: 0,
-    GROUP_ADMIN: 1,
-    BOT_ADMIN: 2,
-    OWNER: 3
+  const roleValue = COMMAND_CONFIG.roles[role] ?? 0;
+
+  const requiredRole =
+    COMMAND_CONFIG.roles[commandConfig.role || "USER"];
+
+  if (requiredRole === undefined) {
+    return {
+      allowed: false,
+      role,
+      reason: "Invalid command role"
+    };
+  }
+
+  if (roleValue < requiredRole) {
+    return {
+      allowed: false,
+      role,
+      reason: "Insufficient role"
+    };
+  }
+
+  let mode = CONFIG.MESSAGE_MODE;
+
+  if (isGroup) {
+    try {
+      const group = await getGroup(jid);
+
+      if (group?.mode) mode = group.mode;
+    } catch {
+      // Use global mode if group data is unavailable.
+    }
+  }
+
+  if (owner) {
+    return { allowed: true, role, reason: "Owner" };
+  }
+
+  if (mode === "ownerOnly") {
+    return { allowed: false, role, reason: "Owner only mode" };
+  }
+
+  if (mode === "adminOnly" && !botAdmin && !groupAdmin) {
+    return { allowed: false, role, reason: "Admin only mode" };
+  }
+
+  if (mode === "whiteListMode" && !whitelisted && !botAdmin) {
+    return { allowed: false, role, reason: "Whitelist mode" };
+  }
+
+  return {
+    allowed: true,
+    role,
+    reason: "Permission granted"
   };
-
-  return (levels[role] ?? 0) >= (levels[requiredRole] ?? 0);
-};
-
-export const checkCommandPermission = async ({
-  senderJid,
-  command,
-  isGroup = false,
-  groupMetadata = null
-}) => {
-  const requiredRole = command?.config?.role || "USER";
-
-  return hasPermission({
-    senderJid,
-    requiredRole,
-    isGroup,
-    groupMetadata
-  });
-};
-
-export const getPermissionInfo = () => ({
-  author: AUTHOR,
-  owner: CONFIG.OWNER_ID,
-  ownerNumber: CONFIG.OWNER_NUMBER,
-  botAdmins: CONFIG.BOT_ADMIN_IDS,
-  modes: CONFIG.MODES
-});
+}
