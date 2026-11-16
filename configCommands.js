@@ -1,8 +1,7 @@
-import { AUTHOR } from "./config.js";
+
+// AUTHOR: 𝐑𝐉 𝐬𝐢𝐲𝐚𝐦
 
 export const COMMAND_CONFIG = Object.freeze({
-  author: AUTHOR,
-
   modes: {
     ALL: "all",
     ADMIN_ONLY: "adminOnly",
@@ -17,15 +16,9 @@ export const COMMAND_CONFIG = Object.freeze({
     OWNER: 3
   },
 
-  folders: {
-    COMMANDS: "./scripts/cmds",
-    EVENTS: "./scripts/events"
-  },
+  defaultRole: "USER",
 
-  settings: {
-    groupSupport: true,
-    inboxSupport: true,
-    authorCheck: true,
-    commandAliases: true
-  }
+  commandExtension: ".js",
+
+  eventExtension: ".js"
 });
