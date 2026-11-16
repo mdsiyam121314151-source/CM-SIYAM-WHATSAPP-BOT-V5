@@ -1,3 +1,6 @@
+
+// AUTHOR: 𝐑𝐉 𝐬𝐢𝐲𝐚𝐦
+
 import fs from "fs-extra";
 import pino from "pino";
 
@@ -6,8 +9,11 @@ import makeWASocket, {
   fetchLatestBaileysVersion
 } from "@whiskeysockets/baileys";
 
-import { CONFIG, AUTHOR } from "../config.js";
+import { CONFIG } from "../config.js";
 import { requestPairing } from "./pairing.js";
+import { createLogger } from "../system/logger.js";
+
+const logger = createLogger();
 
 export async function connectToWhatsApp() {
   await fs.ensureDir(CONFIG.SESSION_DIR);
@@ -21,30 +27,43 @@ export async function connectToWhatsApp() {
     const result = await fetchLatestBaileysVersion();
     version = result.version;
   } catch (error) {
-    console.warn("[RJ-SIYAM] Could not fetch WhatsApp version");
+    logger.warn("Could not fetch latest WhatsApp version");
   }
 
   const sock = makeWASocket({
-    auth: state,
     ...(version ? { version } : {}),
+
+    auth: state,
+
     logger: pino({ level: "silent" }),
+
     printQRInTerminal: false,
-    browser: [CONFIG.BOT_NAME, "Chrome", CONFIG.VERSION]
+
+    browser: [
+      CONFIG.BOT_NAME,
+      "Chrome",
+      CONFIG.VERSION
+    ],
+
+    markOnlineOnConnect: false,
+    syncFullHistory: false
   });
 
   sock.ev.on("creds.update", saveCreds);
 
-  if (!state.creds.registered) {
+  if (!state.creds.registered && CONFIG.PHONE_NUMBER) {
     setTimeout(async () => {
-      try {
-        await requestPairing(sock, CONFIG.PHONE_NUMBER);
-      } catch (error) {
-        console.error("[RJ-SIYAM] Pairing error:", error.message);
+      if (!state.creds.registered) {
+        await requestPairing(sock);
       }
     }, 3000);
   }
 
-  console.log(`[RJ-SIYAM] Author: ${AUTHOR}`);
+  if (!CONFIG.PHONE_NUMBER && !state.creds.registered) {
+    logger.warn(
+      "BOT_PHONE_NUMBER is empty. Pairing cannot start."
+    );
+  }
 
   return sock;
-        }
+}
