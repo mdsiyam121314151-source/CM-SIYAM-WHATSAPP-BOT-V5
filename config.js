@@ -1,52 +1,44 @@
 
-import "dotenv/config";
+// AUTHOR: 𝐑𝐉 𝐬𝐢𝐲𝐚𝐦
 
-// লেখকের নাম
+import "dotenv/config";
+import path from "path";
+import { fileURLToPath } from "url";
+
 export const AUTHOR = "𝐑𝐉 𝐬𝐢𝐲𝐚𝐦";
 
+const ROOT_DIR = path.dirname(fileURLToPath(import.meta.url));
+
 const list = (value = "") =>
-  value.split(",").map(v => v.trim()).filter(Boolean);
+  value.split(",")
+    .map(v => v.trim().replace(/\D/g, ""))
+    .filter(Boolean);
 
 export const CONFIG = Object.freeze({
-  // বটের নাম
   BOT_NAME: "RJ-siyam whatsapp-botV5",
-
-  // বটের ভার্সন
-  VERSION: "5.0",
-
-  // লেখকের নাম
+  VERSION: "5.0.0",
   AUTHOR,
 
-  // বটের কমান্ড Prefix
+  ROOT_DIR,
+
   PREFIX: process.env.BOT_PREFIX || ".",
 
-  // এখানে তোমার বটের WhatsApp নাম্বার বসাবে
   PHONE_NUMBER: (process.env.BOT_PHONE_NUMBER || "").replace(/\D/g, ""),
-
-  // এখানে বটের মালিক অর্থাৎ তোমার নিজের WhatsApp নাম্বার বসাবে
   OWNER: (process.env.OWNER_NUMBER || "").replace(/\D/g, ""),
 
-  // এখানে বটের অন্যান্য অ্যাডমিনদের WhatsApp নাম্বার বসাবে
   BOT_ADMINS: list(process.env.BOT_ADMINS),
-
-  // এখানে যাদের বট ব্যবহারের বিশেষ অনুমতি দিতে চাও তাদের নাম্বার বসাবে
   WHITELIST: list(process.env.WHITELIST),
 
-
-  SESSION_DIR: "./session",
-
-
-  COMMAND_DIR: "./scripts/cmds",
-
-
-  EVENT_DIR: "./scripts/events",
+  SESSION_DIR: path.join(ROOT_DIR, "session"),
+  COMMAND_DIR: path.join(ROOT_DIR, "scripts", "cmds"),
+  EVENT_DIR: path.join(ROOT_DIR, "scripts", "events"),
+  DATABASE_DIR: path.join(ROOT_DIR, "database", "data"),
 
   LOG_LEVEL: process.env.LOG_LEVEL || "info",
 
   MESSAGE_MODE: process.env.MESSAGE_MODE || "all",
 
   ALLOW_GROUP: true,
-
   ALLOW_INBOX: true,
 
   AUTHOR_CHECK: true,
@@ -54,6 +46,5 @@ export const CONFIG = Object.freeze({
   COOLDOWN: 1000,
 
   RECONNECT_DELAY: 5000,
-
   MAX_RECONNECT_DELAY: 60000
 });
