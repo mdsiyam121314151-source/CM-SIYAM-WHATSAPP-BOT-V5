@@ -1,28 +1,28 @@
-import { AUTHOR, CONFIG } from "../config.js";
 
-export function handleError(error, source = "UNKNOWN") {
-  const time = new Date().toLocaleString();
+// AUTHOR: 𝐑𝐉 𝐬𝐢𝐲𝐚𝐦
 
-  console.error("╭━━━━━━━━━━━━━━━━━━━━━━━━━━╮");
-  console.error("      RJ-SIYAM ERROR");
-  console.error("╰━━━━━━━━━━━━━━━━━━━━━━━━━━╯");
+import { CONFIG } from "../config.js";
 
+export function handleError(error, source = "Unknown") {
+  const time = new Date().toISOString();
+
+  console.error("\n========== BOT ERROR ==========");
   console.error("Bot:", CONFIG.BOT_NAME);
-  console.error("Author:", AUTHOR);
+  console.error("Author:", CONFIG.AUTHOR);
   console.error("Source:", source);
   console.error("Time:", time);
-  console.error("Message:", error?.message || error);
-  console.error("Stack:", error?.stack || "Not available");
-
-  console.error("╭━━━━━━━━━━━━━━━━━━━━━━━━━━╮");
+  console.error("Error:", error?.stack || error);
+  console.error("================================\n");
 }
 
-export function installErrorHandlers() {
+export function installErrorHandlers(logger) {
   process.on("uncaughtException", error => {
-    handleError(error, "UNCAUGHT_EXCEPTION");
+    handleError(error, "Uncaught Exception");
+    logger?.error?.("Uncaught exception received");
   });
 
-  process.on("unhandledRejection", error => {
-    handleError(error, "UNHANDLED_REJECTION");
+  process.on("unhandledRejection", reason => {
+    handleError(reason, "Unhandled Rejection");
+    logger?.error?.("Unhandled promise rejection");
   });
 }
