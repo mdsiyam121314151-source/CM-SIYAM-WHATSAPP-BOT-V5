@@ -1,43 +1,80 @@
 
 // AUTHOR: 𝐑𝐉 𝐬𝐢𝐲𝐚𝐦
+// WARNING: AUTHOR পরিবর্তন করলে এই ফাইল Disable হবে।
 
-import { CONFIG } from "../config.js";
-import { createLogger } from "../system/logger.js";
-
-const logger = createLogger();
+import { AUTHOR, CONFIG } from "../config.js";
 
 let pairingRequested = false;
 
-export async function requestPairing(sock) {
-  if (pairingRequested) return null;
+export const requestPairingCode = async (sock) => {
+  if (!sock) {
+    throw new Error("WhatsApp socket পাওয়া যায়নি।");
+  }
 
-  if (!CONFIG.PHONE_NUMBER) {
-    logger.error("Phone number is missing in .env");
+  if (sock.authState?.creds?.registered) {
+    console.log("✅ WhatsApp ইতিমধ্যে লিংক করা আছে।");
     return null;
   }
 
-  if (!sock || typeof sock.requestPairingCode !== "function") {
-    logger.error("Pairing is not available on this connection");
+  if (pairingRequested) {
+    console.log("⏳ Pairing Code request ইতিমধ্যে চলছে।");
     return null;
   }
+
+  pairingRequested = true;
+
+  const phone = CONFIG.PAIRING.PHONE_NUMBER;
 
   try {
-    pairingRequested = true;
+    console.log(`
+╭━━━━━━━━━━━━━━━━━━━━━━━━━━╮
+       📱 WHATSAPP LINK
+╰━━━━━━━━━━━━━━━━━━━━━━━━━━╯
 
-    const code = await sock.requestPairingCode(
-      CONFIG.PHONE_NUMBER
-    );
+📞 বটের নম্বর: +${phone}
 
-    logger.success("WhatsApp Pairing Code:");
-    logger.info(code);
+📲 WhatsApp খুলুন
+⚙️ Settings চাপুন
+🔗 Linked Devices নির্বাচন করুন
+📱 Link a Device চাপুন
+🔢 Link with phone number instead নির্বাচন করুন
+
+⏳ Pairing Code তৈরি হচ্ছে...
+`);
+
+    await new Promise(resolve => setTimeout(resolve, 3000));
+
+    const code = await sock.requestPairingCode(phone);
+
+    console.log(`
+╭━━━━━━━━━━━━━━━━━━━━━━━━━━╮
+       🔐 PAIRING CODE
+╰━━━━━━━━━━━━━━━━━━━━━━━━━━╯
+
+📞 Phone Number : +${phone}
+🔑 Pairing Code : ${code}
+
+📲 কোডটি WhatsApp-এ লিখুন।
+⏳ কোডের মেয়াদ শেষ হওয়ার আগে ব্যবহার করুন।
+
+✍️ Author : ${AUTHOR}
+╰━━━━━━━━━━━━━━━━━━━━━━━━━━╯
+`);
 
     return code;
-
   } catch (error) {
     pairingRequested = false;
 
-    logger.error("Pairing code request failed", error);
+    console.error(`
+❌ WhatsApp Pairing Failed
+📞 Number: +${phone}
+⚠️ Error: ${error.message}
+`);
 
-    return null;
+    throw error;
   }
-}
+};
+
+export const resetPairingRequest = () => {
+  pairingRequested = false;
+};
