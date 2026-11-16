@@ -1,45 +1,49 @@
-import { AUTHOR, CONFIG } from "../config.js";
 
-const COLORS = {
-  reset: "\x1b[0m",
-  red: "\x1b[31m",
-  green: "\x1b[32m",
-  yellow: "\x1b[33m",
-  blue: "\x1b[34m",
-  cyan: "\x1b[36m",
-  gray: "\x1b[90m"
-};
+// AUTHOR: 𝐑𝐉 𝐬𝐢𝐲𝐚𝐦
 
-function format(level, color, ...args) {
-  const time = new Date().toLocaleTimeString();
+import { CONFIG } from "../config.js";
 
-  console.log(
-    `${COLORS.gray}[${time}]${COLORS.reset}`,
-    `${color}[RJ-SIYAM ${level}]${COLORS.reset}`,
-    ...args
-  );
+function timestamp() {
+  return new Date().toLocaleString();
 }
 
 export function createLogger() {
-  return {
-    info: (...args) =>
-      format("INFO", COLORS.cyan, ...args),
+  const output = (level, message, error = null) => {
+    const line =
+      `[${timestamp()}] [${level}] [${CONFIG.BOT_NAME}] ${message}`;
 
-    success: (...args) =>
-      format("SUCCESS", COLORS.green, ...args),
+    if (level === "ERROR") {
+      console.error(line);
 
-    warn: (...args) =>
-      format("WARN", COLORS.yellow, ...args),
-
-    error: (...args) =>
-      format("ERROR", COLORS.red, ...args),
-
-    debug: (...args) => {
-      if (CONFIG.LOG_LEVEL === "debug") {
-        format("DEBUG", COLORS.blue, ...args);
+      if (error) {
+        console.error(error?.stack || error);
       }
-    },
 
-    author: AUTHOR
+      return;
+    }
+
+    if (level === "WARN") {
+      console.warn(line);
+      return;
+    }
+
+    console.log(line);
+  };
+
+  return {
+    info: (message) => output("INFO", message),
+
+    success: (message) => output("SUCCESS", message),
+
+    warn: (message) => output("WARN", message),
+
+    error: (message, error = null) =>
+      output("ERROR", message, error),
+
+    debug: (message) => {
+      if (CONFIG.LOG_LEVEL === "debug") {
+        output("DEBUG", message);
+      }
+    }
   };
 }
