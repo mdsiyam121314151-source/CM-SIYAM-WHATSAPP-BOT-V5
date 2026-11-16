@@ -1,50 +1,97 @@
 
-// AUTHOR: 𝐑𝐉 𝐬𝐢𝐲𝐚𝐦
-
 import "dotenv/config";
-import path from "path";
-import { fileURLToPath } from "url";
+
+// AUTHOR: 𝐑𝐉 𝐬𝐢𝐲𝐚𝐦
+// WARNING: AUTHOR পরিবর্তন করলে এই ফাইল Disable হবে।
 
 export const AUTHOR = "𝐑𝐉 𝐬𝐢𝐲𝐚𝐦";
 
-const ROOT_DIR = path.dirname(fileURLToPath(import.meta.url));
-
 const list = (value = "") =>
-  value.split(",")
-    .map(v => v.trim().replace(/\D/g, ""))
-    .filter(Boolean);
+  value.split(",").map(v => v.trim()).filter(Boolean);
+
+const normalizeNumber = (number = "") => {
+  let value = String(number).replace(/\D/g, "");
+
+  if (value.startsWith("0")) {
+    value = "88" + value;
+  }
+
+  return value;
+};
+
+const BOT_NUMBER = normalizeNumber(
+  process.env.BOT_PHONE_NUMBER || "01608279461"
+);
+
+const OWNER_NUMBER = normalizeNumber(
+  process.env.OWNER_NUMBER || "01789138157"
+);
 
 export const CONFIG = Object.freeze({
   BOT_NAME: "RJ-siyam whatsapp-botV5",
-  VERSION: "5.0.0",
   AUTHOR,
 
-  ROOT_DIR,
+  VERSION: "5.0.0",
+  PREFIX: "/",
 
-  PREFIX: process.env.BOT_PREFIX || ".",
+  BOT_PHONE_NUMBER: BOT_NUMBER,
+  OWNER_NUMBER,
 
-  PHONE_NUMBER: (process.env.BOT_PHONE_NUMBER || "").replace(/\D/g, ""),
-  OWNER: (process.env.OWNER_NUMBER || "").replace(/\D/g, ""),
+  OWNER_ID: `${OWNER_NUMBER}@s.whatsapp.net`,
 
-  BOT_ADMINS: list(process.env.BOT_ADMINS),
-  WHITELIST: list(process.env.WHITELIST),
+  BOT_ADMIN_IDS: [
+    `${OWNER_NUMBER}@s.whatsapp.net`
+  ],
 
-  SESSION_DIR: path.join(ROOT_DIR, "session"),
-  COMMAND_DIR: path.join(ROOT_DIR, "scripts", "cmds"),
-  EVENT_DIR: path.join(ROOT_DIR, "scripts", "events"),
-  DATABASE_DIR: path.join(ROOT_DIR, "database", "data"),
+  WHITELIST_IDS: list(
+    process.env.WHITELIST_IDS
+  ),
 
-  LOG_LEVEL: process.env.LOG_LEVEL || "info",
+  SESSION_DIR: "./session",
+  COMMAND_DIR: "./scripts/cmds",
+  EVENT_DIR: "./scripts/events",
 
-  MESSAGE_MODE: process.env.MESSAGE_MODE || "all",
+  DEFAULT_MODE: "all",
 
-  ALLOW_GROUP: true,
-  ALLOW_INBOX: true,
+  MODES: Object.freeze([
+    "all",
+    "adminOnly",
+    "whiteListMode",
+    "ownerOnly"
+  ]),
 
-  AUTHOR_CHECK: true,
+  PAIRING: Object.freeze({
+    ENABLED: true,
+    PHONE_NUMBER: BOT_NUMBER,
+    CODE_LENGTH: 8,
+    SHOW_PHONE_NUMBER: true
+  }),
 
-  COOLDOWN: 1000,
+  DATABASE: Object.freeze({
+    DIRECTORY: "./database",
+    USERS_FILE: "./database/users.json",
+    GROUPS_FILE: "./database/groups.json"
+  }),
 
-  RECONNECT_DELAY: 5000,
-  MAX_RECONNECT_DELAY: 60000
+  LOGGING: Object.freeze({
+    SHOW_PAIRING_CODE: true,
+    SHOW_CONNECTION_STATUS: true,
+    SHOW_PHONE_NUMBER: true
+  })
 });
+
+export const isOwner = (jid = "") => {
+  const number = String(jid).split("@")[0].split(":")[0];
+  return normalizeNumber(number) === OWNER_NUMBER;
+};
+
+export const isBotAdmin = (jid = "") => {
+  const number = String(jid).split("@")[0].split(":")[0];
+
+  return (
+    normalizeNumber(number) === OWNER_NUMBER ||
+    CONFIG.BOT_ADMIN_IDS.includes(jid)
+  );
+};
+
+export const getPhoneNumber = () => BOT_NUMBER;
