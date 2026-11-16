@@ -1,135 +1,110 @@
+
+// AUTHOR: 𝐑𝐉 𝐬𝐢𝐲𝐚𝐦
+
 import { CONFIG } from "../config.js";
 import { COMMAND_CONFIG } from "../configCommands.js";
+import { getGroup } from "../database/groups.js";
 
-function normalizeNumber(value = "") {
-  return String(value)
-    .split("@")[0]
-    .split(":")[0]
-    .replace(/\D/g, "");
+function digits(value = "") {
+  return String(value).replace(/\D/g, "");
 }
 
-function includesNumber(list, number) {
-  return list.some(
-    item => normalizeNumber(item) === number
-  );
+function isSameUser(a, b) {
+  const first = digits(a);
+  const second = digits(b);
+
+  return first && second && first === second;
 }
 
-export async function checkPermission(sock, message, command) {
-  const jid = message.key.remoteJid;
-  const sender = message.key.participant || jid;
+export async function checkPermission(context, commandConfig = {}) {
+  const { sock, jid, senderJid, isGroup } = context;
 
-  const senderNumber = normalizeNumber(sender);
-  const ownerNumber = normalizeNumber(CONFIG.OWNER);
+  const owner = isSameUser(senderJid, CONFIG.OWNER);
 
-  const isOwner =
-    Boolean(ownerNumber) && senderNumber === ownerNumber;
-
-  const isBotAdmin = includesNumber(
-    CONFIG.BOT_ADMINS,
-    senderNumber
+  const botAdmin = CONFIG.BOT_ADMINS.some(number =>
+    isSameUser(senderJid, number)
   );
 
-  const isWhitelisted = includesNumber(
-    CONFIG.WHITELIST,
-    senderNumber
+  const whitelisted = CONFIG.WHITELIST.some(number =>
+    isSameUser(senderJid, number)
   );
 
-  let isGroupAdmin = false;
+  let groupAdmin = false;
 
-  if (jid.endsWith("@g.us")) {
+  if (isGroup) {
     try {
       const metadata = await sock.groupMetadata(jid);
 
-      const participant = metadata.participants.find(
-        item =>
-          normalizeNumber(item.id) === senderNumber
-      );
+      groupAdmin = metadata.participants.some(participant => {
+        const same = participant.id === senderJid;
 
-      isGroupAdmin =
-        participant?.admin === "admin" ||
-        participant?.admin === "superadmin";
+        return same &&
+          ["admin", "superadmin"].includes(participant.admin);
+      });
 
     } catch {
-      isGroupAdmin = false;
+      groupAdmin = false;
     }
   }
 
   let role = "USER";
-  let rank = COMMAND_CONFIG.roles.USER;
 
-  if (isGroupAdmin) {
-    role = "GROUP_ADMIN";
-    rank = COMMAND_CONFIG.roles.GROUP_ADMIN;
-  }
+  if (owner) role = "OWNER";
+  else if (botAdmin) role = "BOT_ADMIN";
+  else if (groupAdmin) role = "GROUP_ADMIN";
 
-  if (isBotAdmin) {
-    role = "BOT_ADMIN";
-    rank = COMMAND_CONFIG.roles.BOT_ADMIN;
-  }
-
-  if (isOwner) {
-    role = "OWNER";
-    rank = COMMAND_CONFIG.roles.OWNER;
-  }
-
-  const mode = CONFIG.MESSAGE_MODE;
-
-  if (
-    mode === COMMAND_CONFIG.modes.OWNER_ONLY &&
-    !isOwner
-  ) {
-    return {
-      allowed: false,
-      role,
-      reason: "শুধু Owner এই Bot ব্যবহার করতে পারবেন।"
-    };
-  }
-
-  if (
-    mode === COMMAND_CONFIG.modes.ADMIN_ONLY &&
-    !isOwner &&
-    !isBotAdmin &&
-    !isGroupAdmin
-  ) {
-    return {
-      allowed: false,
-      role,
-      reason: "শুধু Admin এই Mode-এ কমান্ড ব্যবহার করতে পারবেন।"
-    };
-  }
-
-  if (
-    mode === COMMAND_CONFIG.modes.WHITELIST &&
-    !isOwner &&
-    !isWhitelisted
-  ) {
-    return {
-      allowed: false,
-      role,
-      reason: "আপনি Whitelist-এ নেই।"
-    };
-  }
+  const roleValue = COMMAND_CONFIG.roles[role] ?? 0;
 
   const requiredRole =
-    COMMAND_CONFIG.roles[command.config.role || "USER"];
+    COMMAND_CONFIG.roles[commandConfig.role || "USER"];
 
-  if (
-    typeof requiredRole === "number" &&
-    rank < requiredRole
-  ) {
+  if (requiredRole === undefined) {
     return {
       allowed: false,
       role,
-      reason: "এই কমান্ড ব্যবহারের অনুমতি আপনার নেই।"
+      reason: "Invalid command role"
     };
+  }
+
+  if (roleValue < requiredRole) {
+    return {
+      allowed: false,
+      role,
+      reason: "Insufficient role"
+    };
+  }
+
+  let mode = CONFIG.MESSAGE_MODE;
+
+  if (isGroup) {
+    try {
+      const group = await getGroup(jid);
+
+      if (group?.mode) mode = group.mode;
+    } catch {
+      // Use global mode if group data is unavailable.
+    }
+  }
+
+  if (owner) {
+    return { allowed: true, role, reason: "Owner" };
+  }
+
+  if (mode === "ownerOnly") {
+    return { allowed: false, role, reason: "Owner only mode" };
+  }
+
+  if (mode === "adminOnly" && !botAdmin && !groupAdmin) {
+    return { allowed: false, role, reason: "Admin only mode" };
+  }
+
+  if (mode === "whiteListMode" && !whitelisted && !botAdmin) {
+    return { allowed: false, role, reason: "Whitelist mode" };
   }
 
   return {
     allowed: true,
     role,
-    isOwner,
-    isBotAdmin,
-    isGroupAdmin,
-    isWhitelisted
+    reason: "Permission granted"
   };
-      }
+}
