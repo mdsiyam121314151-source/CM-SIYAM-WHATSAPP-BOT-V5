@@ -1,91 +1,100 @@
+
+// AUTHOR: 𝐑𝐉 𝐬𝐢𝐲𝐚𝐦
+
 import fs from "fs-extra";
 import path from "path";
 import { pathToFileURL } from "url";
 
 import { CONFIG, AUTHOR } from "../config.js";
+import { createLogger } from "../system/logger.js";
+
+const logger = createLogger();
 
 const events = new Map();
 
 export async function loadEvents() {
-  await fs.ensureDir(CONFIG.EVENT_DIR);
   events.clear();
+
+  await fs.ensureDir(CONFIG.EVENT_DIR);
 
   const files = await fs.readdir(CONFIG.EVENT_DIR);
 
   for (const file of files) {
     if (!file.endsWith(".js")) continue;
 
-    const filePath = path.resolve(CONFIG.EVENT_DIR, file);
+    const fullPath = path.join(CONFIG.EVENT_DIR, file);
 
     try {
+      const source = await fs.readFile(fullPath, "utf8");
+
+      if (CONFIG.AUTHOR_CHECK &&
+          !source.includes(`AUTHOR: ${AUTHOR}`)) {
+        logger.warn(`Event disabled: author mismatch: ${file}`);
+        continue;
+      }
+
       const module = await import(
-        `${pathToFileURL(filePath).href}?update=${Date.now()}`
+        pathToFileURL(fullPath).href + `?v=${Date.now()}`
       );
 
       const event = module.default;
 
       if (!event?.config || typeof event.onStart !== "function") {
-        console.warn(`[RJ-SIYAM] Invalid event disabled: ${file}`);
+        logger.warn(`Invalid event disabled: ${file}`);
         continue;
       }
 
       if (event.config.author !== AUTHOR) {
-        console.error(`[RJ-SIYAM] Author mismatch: ${file}`);
+        logger.warn(`Event disabled: wrong author: ${file}`);
         continue;
       }
 
-      const name = event.config.name;
+      const eventName = event.config.event;
 
-      if (!name) {
-        console.warn(`[RJ-SIYAM] Event name missing: ${file}`);
+      if (!eventName) {
+        logger.warn(`Event disabled: missing event name: ${file}`);
         continue;
       }
 
-      events.set(name, event);
+      if (!events.has(eventName)) {
+        events.set(eventName, []);
+      }
 
-      console.log(`[RJ-SIYAM] Event loaded: ${name}`);
+      events.get(eventName).push(event);
+
+      logger.success(`Loaded event: ${event.config.name}`);
 
     } catch (error) {
-      console.error(`[RJ-SIYAM] Event load failed: ${file}`, error);
+      logger.error(`Failed to load event: ${file}`, error);
     }
   }
 
-  console.log(`[RJ-SIYAM] Total events loaded: ${events.size}`);
-}
-
-export async function runEvent(name, context = {}) {
-  const event = events.get(name);
-
-  if (!event) return false;
-
-  try {
-    await event.onStart(context);
-    return true;
-  } catch (error) {
-    console.error(`[RJ-SIYAM] Event error: ${name}`, error);
-    return false;
-  }
+  return events;
 }
 
 export function attachEvents(sock) {
-  sock.ev.on("group-participants.update", async update => {
-    await runEvent("groupParticipants", {
-      sock,
-      update
+  for (const [eventName, handlers] of events.entries()) {
+    sock.ev.on(eventName, async data => {
+      for (const event of handlers) {
+        try {
+          await event.onStart({
+            sock,
+            data,
+            eventName
+          });
+        } catch (error) {
+          logger.error(
+            `Event error: ${event.config.name}`,
+            error
+          );
+        }
+      }
     });
-  });
+  }
 
-  sock.ev.on("messages.upsert", async data => {
-    await runEvent("messagesUpsert", {
-      sock,
-      data
-    });
-  });
+  logger.success("Event listeners attached");
+}
 
-  sock.ev.on("connection.update", async data => {
-    await runEvent("connectionUpdate", {
-      sock,
-      data
-    });
-  });
+export function getEvents() {
+  return events;
 }
