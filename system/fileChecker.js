@@ -1,88 +1,88 @@
+
+// AUTHOR: 𝐑𝐉 𝐬𝐢𝐲𝐚𝐦
+
 import fs from "fs-extra";
 import path from "path";
 
-import { AUTHOR, CONFIG } from "../config.js";
+import { CONFIG, AUTHOR } from "../config.js";
 
-const ROOT = process.cwd();
-
-const CHECK_DIRS = [
-  CONFIG.COMMAND_DIR,
-  CONFIG.EVENT_DIR
+const SOURCE_DIRS = [
+  "core",
+  "database",
+  "system",
+  "scripts"
 ];
 
-export async function checkFiles() {
-  const results = {
-    author: AUTHOR,
-    checked: 0,
-    valid: 0,
-    invalid: [],
-    errors: []
-  };
+const ROOT_FILES = [
+  "index.js",
+  "config.js",
+  "configCommands.js"
+];
 
-  for (const directory of CHECK_DIRS) {
-    await fs.ensureDir(directory);
+async function scanDirectory(directory, results = []) {
+  if (!(await fs.pathExists(directory))) return results;
 
-    const files = await fs.readdir(directory);
+  const entries = await fs.readdir(directory, {
+    withFileTypes: true
+  });
 
-    for (const file of files) {
-      if (!file.endsWith(".js")) continue;
+  for (const entry of entries) {
+    const fullPath = path.join(directory, entry.name);
 
-      const filePath = path.resolve(ROOT, directory, file);
-
-      results.checked++;
-
-      try {
-        const source = await fs.readFile(filePath, "utf8");
-
-        const hasAuthor =
-          source.includes(`author: "${AUTHOR}"`) ||
-          source.includes(`author: '${AUTHOR}'`);
-
-        if (hasAuthor) {
-          results.valid++;
-        } else {
-          results.invalid.push({
-            file,
-            directory,
-            reason: "Author mismatch or missing author"
-          });
-        }
-
-      } catch (error) {
-        results.errors.push({
-          file,
-          reason: error.message
-        });
+    if (entry.isDirectory()) {
+      if (["node_modules", "session", "data"].includes(entry.name)) {
+        continue;
       }
+
+      await scanDirectory(fullPath, results);
+
+    } else if (entry.isFile() && entry.name.endsWith(".js")) {
+      results.push(fullPath);
     }
   }
 
   return results;
 }
 
-export async function printFileReport() {
-  const report = await checkFiles();
+export async function checkFiles() {
+  const files = [];
 
-  console.log("╭━━━━━━━━━━━━━━━━━━━━━━━━━━╮");
-  console.log("      RJ-SIYAM FILE CHECK");
-  console.log("╰━━━━━━━━━━━━━━━━━━━━━━━━━━╯");
-
-  console.log("Author:", AUTHOR);
-  console.log("Checked:", report.checked);
-  console.log("Valid:", report.valid);
-  console.log("Invalid:", report.invalid.length);
-
-  for (const item of report.invalid) {
-    console.error(
-      `[RJ-SIYAM] INVALID: ${item.directory}/${item.file}`
+  for (const dir of SOURCE_DIRS) {
+    await scanDirectory(
+      path.join(CONFIG.ROOT_DIR, dir),
+      files
     );
   }
 
-  for (const item of report.errors) {
-    console.error(
-      `[RJ-SIYAM] ERROR: ${item.file}: ${item.reason}`
-    );
+  for (const file of ROOT_FILES) {
+    files.push(path.join(CONFIG.ROOT_DIR, file));
   }
 
-  return report;
+  const results = [];
+
+  for (const file of files) {
+    try {
+      const source = await fs.readFile(file, "utf8");
+
+      results.push({
+        file,
+        valid: source.includes(`AUTHOR: ${AUTHOR}`),
+        author: AUTHOR
+      });
+
+    } catch (error) {
+      results.push({
+        file,
+        valid: false,
+        error: error.message
+      });
+    }
+  }
+
+  return {
+    total: results.length,
+    valid: results.filter(item => item.valid).length,
+    invalid: results.filter(item => !item.valid),
+    results
+  };
 }
