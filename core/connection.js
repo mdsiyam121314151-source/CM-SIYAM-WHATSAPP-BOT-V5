@@ -1,69 +1,95 @@
 
 // AUTHOR: 𝐑𝐉 𝐬𝐢𝐲𝐚𝐦
-
-import fs from "fs-extra";
-import pino from "pino";
+// WARNING: AUTHOR পরিবর্তন করলে এই ফাইল Disable হবে।
 
 import makeWASocket, {
   useMultiFileAuthState,
+  DisconnectReason,
   fetchLatestBaileysVersion
 } from "@whiskeysockets/baileys";
 
-import { CONFIG } from "../config.js";
-import { requestPairing } from "./pairing.js";
-import { createLogger } from "../system/logger.js";
+import P from "pino";
+import fs from "fs-extra";
 
-const logger = createLogger();
+import { CONFIG, AUTHOR } from "../config.js";
+import { requestPairingCode } from "./pairing.js";
 
-export async function connectToWhatsApp() {
+export const connectToWhatsApp = async () => {
   await fs.ensureDir(CONFIG.SESSION_DIR);
 
-  const { state, saveCreds } =
-    await useMultiFileAuthState(CONFIG.SESSION_DIR);
+  const { state, saveCreds } = await useMultiFileAuthState(
+    CONFIG.SESSION_DIR
+  );
 
-  let version;
-
-  try {
-    const result = await fetchLatestBaileysVersion();
-    version = result.version;
-  } catch (error) {
-    logger.warn("Could not fetch latest WhatsApp version");
-  }
+  const { version } = await fetchLatestBaileysVersion();
 
   const sock = makeWASocket({
-    ...(version ? { version } : {}),
-
+    version,
     auth: state,
-
-    logger: pino({ level: "silent" }),
-
+    logger: P({ level: "silent" }),
+    browser: ["Ubuntu", "Chrome", "22.04.4"],
     printQRInTerminal: false,
-
-    browser: [
-      CONFIG.BOT_NAME,
-      "Chrome",
-      CONFIG.VERSION
-    ],
-
-    markOnlineOnConnect: false,
+    markOnlineOnConnect: true,
     syncFullHistory: false
   });
 
   sock.ev.on("creds.update", saveCreds);
 
-  if (!state.creds.registered && CONFIG.PHONE_NUMBER) {
-    setTimeout(async () => {
-      if (!state.creds.registered) {
-        await requestPairing(sock);
-      }
-    }, 3000);
+  console.log(`
+╭━━━━━━━━━━━━━━━━━━━━━━━━━━╮
+       🤖 RJ SIYAM BOT
+╰━━━━━━━━━━━━━━━━━━━━━━━━━━╯
+
+📞 Bot Number: +${CONFIG.BOT_PHONE_NUMBER}
+👑 Owner: ${CONFIG.OWNER_NUMBER}
+⚙️ Prefix: ${CONFIG.PREFIX}
+📦 Version: ${CONFIG.VERSION}
+✍️ Author: ${AUTHOR}
+`);
+
+  if (!state.creds.registered) {
+    try {
+      await requestPairingCode(sock);
+    } catch (error) {
+      console.error("❌ Pairing request failed:", error.message);
+    }
   }
 
-  if (!CONFIG.PHONE_NUMBER && !state.creds.registered) {
-    logger.warn(
-      "BOT_PHONE_NUMBER is empty. Pairing cannot start."
-    );
-  }
+  sock.ev.on("connection.update", ({ connection, lastDisconnect }) => {
+    if (connection === "connecting") {
+      console.log("🔄 WhatsApp সংযোগ হচ্ছে...");
+    }
+
+    if (connection === "open") {
+      const connectedNumber =
+        sock.user?.id?.split(":")[0] || CONFIG.BOT_PHONE_NUMBER;
+
+      console.log(`
+╭━━━━━━━━━━━━━━━━━━━━━━━━━━╮
+       ✅ CONNECTION SUCCESS
+╰━━━━━━━━━━━━━━━━━━━━━━━━━━╯
+
+📱 WhatsApp Connected
+📞 Number: +${connectedNumber}
+🤖 Bot: ${CONFIG.BOT_NAME}
+⚙️ Prefix: ${CONFIG.PREFIX}
+👑 Owner: ${CONFIG.OWNER_NUMBER}
+
+🎉 Bot Successfully Online!
+`);
+    }
+
+    if (connection === "close") {
+      const statusCode =
+        lastDisconnect?.error?.output?.statusCode;
+
+      console.log("❌ WhatsApp connection closed:", statusCode);
+
+      if (statusCode === DisconnectReason.loggedOut) {
+        console.log("⚠️ Session logged out. নতুন করে Pairing প্রয়োজন।");
+      }
+    }
+  });
 
   return sock;
-}
+};
