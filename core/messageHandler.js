@@ -1,36 +1,46 @@
-import { getContentType } from "@whiskeysockets/baileys";
+
+// AUTHOR: 𝐑𝐉 𝐬𝐢𝐲𝐚𝐦
 
 import { CONFIG } from "../config.js";
 import { handleCommand } from "./commandHandler.js";
+import { createLogger } from "../system/logger.js";
 
-function getMessageBody(message) {
-  let content = message.message;
+const logger = createLogger();
+
+function unwrapMessage(message) {
+  let current = message;
+
+  for (let i = 0; i < 5; i++) {
+    if (!current) break;
+
+    const next =
+      current.ephemeralMessage?.message ||
+      current.viewOnceMessage?.message ||
+      current.viewOnceMessageV2?.message ||
+      current.documentWithCaptionMessage?.message;
+
+    if (!next) break;
+
+    current = next;
+  }
+
+  return current;
+}
+
+function getMessageText(message) {
+  const content = unwrapMessage(message?.message);
 
   if (!content) return "";
 
-  while (
-    content.ephemeralMessage ||
-    content.viewOnceMessage ||
-    content.viewOnceMessageV2
-  ) {
-    content =
-      content.ephemeralMessage?.message ||
-      content.viewOnceMessage?.message ||
-      content.viewOnceMessageV2?.message ||
-      content;
-  }
-
-  const type = getContentType(content);
-
-  if (!type) return "";
-
-  const data = content[type];
-
   return (
-    data?.text ||
-    data?.caption ||
     content.conversation ||
     content.extendedTextMessage?.text ||
+    content.imageMessage?.caption ||
+    content.videoMessage?.caption ||
+    content.documentMessage?.caption ||
+    content.buttonsResponseMessage?.selectedButtonId ||
+    content.listResponseMessage?.singleSelectReply?.selectedRowId ||
+    content.templateButtonReplyMessage?.selectedId ||
     ""
   ).trim();
 }
@@ -39,32 +49,49 @@ export function handleMessages(sock) {
   sock.ev.on("messages.upsert", async ({ messages, type }) => {
     if (type !== "notify") return;
 
-    for (const message of messages) {
+    for (const message of messages || []) {
       try {
-        if (!message.message) continue;
-        if (message.key.fromMe) continue;
+        if (!message?.message || message.key?.fromMe) continue;
 
         const jid = message.key.remoteJid;
 
         if (!jid || jid === "status@broadcast") continue;
 
-        if (jid.endsWith("@g.us") && !CONFIG.ALLOW_GROUP) {
-          continue;
-        }
+        const isGroup = jid.endsWith("@g.us");
 
-        if (!jid.endsWith("@g.us") && !CONFIG.ALLOW_INBOX) {
-          continue;
-        }
+        if (isGroup && !CONFIG.ALLOW_GROUP) continue;
+        if (!isGroup && !CONFIG.ALLOW_INBOX) continue;
 
-        const body = getMessageBody(message);
+        const body = getMessageText(message);
 
         if (!body) continue;
 
-        await handleCommand(sock, message, body);
+        const senderJid = isGroup
+          ? message.key.participant || message.participant || ""
+          : jid;
+
+        const context = {
+          sock,
+          message,
+          body,
+          jid,
+          senderJid,
+          isGroup,
+          pushName: message.pushName || "User",
+          reply: async text => {
+            return sock.sendMessage(
+              jid,
+              { text: String(text) },
+              { quoted: message }
+            );
+          }
+        };
+
+        await handleCommand(context);
 
       } catch (error) {
-        console.error("[RJ-SIYAM] Message error:", error);
+        logger.error("Message handler error", error);
       }
     }
   });
-    }
+}
