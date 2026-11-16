@@ -1,40 +1,62 @@
+
+// AUTHOR: 𝐑𝐉 𝐬𝐢𝐲𝐚𝐦
+
 import { AUTHOR } from "../config.js";
 import { checkFiles } from "../system/fileChecker.js";
+
+import { createLogger } from "../system/logger.js";
+
+const logger = createLogger();
 
 export async function validateAuthor() {
   const report = await checkFiles();
 
-  if (report.invalid.length > 0 || report.errors.length > 0) {
-    console.error("╭━━━━━━━━━━━━━━━━━━━━━━━━━━╮");
-    console.error("      RJ-SIYAM AUTHOR GUARD");
-    console.error("╰━━━━━━━━━━━━━━━━━━━━━━━━━━╯");
+  logger.info(
+    `Author check: ${report.valid}/${report.total} valid`
+  );
 
-    console.error("Expected Author:", AUTHOR);
-
+  if (report.invalid.length) {
     for (const item of report.invalid) {
-      console.error(
-        `Author mismatch: ${item.directory}/${item.file}`
+      logger.warn(
+        `Author mismatch: ${item.file}`
       );
     }
-
-    return {
-      valid: false,
-      report
-    };
+  } else {
+    logger.success("All scanned source files passed author check");
   }
 
-  console.log("[RJ-SIYAM] All command/event authors are valid.");
-
-  return {
-    valid: true,
-    report
-  };
+  return report;
 }
 
 export default {
   config: {
-    name: "authorGuard",
-    author: AUTHOR
+    name: "authorcheck",
+    aliases: ["checkauthor"],
+    version: "1.0",
+    author: AUTHOR,
+    role: "OWNER",
+    description: "Check project author integrity"
   },
-  validateAuthor
+
+  onStart: async ({ reply }) => {
+    const report = await validateAuthor();
+
+    let output =
+      `╭━━━〔 AUTHOR CHECK 〕━━━╮\n` +
+      `│ Author: ${AUTHOR}\n` +
+      `│ Total: ${report.total}\n` +
+      `│ Valid: ${report.valid}\n` +
+      `│ Invalid: ${report.invalid.length}\n` +
+      `╰━━━━━━━━━━━━━━━━━━╯`;
+
+    if (report.invalid.length) {
+      output += "\n\nInvalid files:\n";
+
+      output += report.invalid
+        .map(item => `• ${item.file}`)
+        .join("\n");
+    }
+
+    await reply(output);
+  }
 };
